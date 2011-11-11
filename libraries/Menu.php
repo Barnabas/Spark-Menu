@@ -31,9 +31,6 @@
  * @category	Libraries
  * @author		David McReynolds @ Daylight Studio
  * @link		http://www.getfuelcms.com/user_guide/libraries/menu
- *
- * --- Addendum ---
- * Modified/repackaged by B. Kendall (barnabas@bkendall.biz) to be distributed as a Spark
  */
 
 class Menu {
@@ -375,23 +372,9 @@ class Menu {
 		if (!empty($menu) AND (isset($this->depth) AND $level < $this->depth) OR !isset($this->depth))
 		{
 			// filter out hidden ones first. Need to do in seperate loop in case there is a hidden one at the end
-			$filtered_menu = array();
-			if (empty($this->include_hidden))
-			{
-				foreach($menu as $key => $val)
-				{
-					if (!$val['hidden'] OR strtolower($val['hidden']) == 'no')
-					{
-						$filtered_menu[$key] = $val;
-					}
-				}
-			}
-			else
-			{
-				$filtered_menu = $menu;
-			}
+			$menu = $this->_filter_hidden($menu);
 
-			if (!empty($filtered_menu))
+			if (!empty($menu))
 			{
 				if (!empty($this->container_tag)) $str .= "\n".str_repeat("\t", ($level + 1))."<".$this->container_tag.$this->_get_attrs($this->container_tag_attrs);
 				if (!empty($this->container_tag_id) AND $level == -1) $str .= " id=\"".$this->container_tag_id."\"";
@@ -401,9 +384,9 @@ class Menu {
 				$level = $level + 1;
 				$i = 0;
 
-				foreach($filtered_menu as $key => $val)
+				foreach($menu as $key => $val)
 				{
-					$str .= $this->_create_open_li($val, $level, $i, ($i == (count($filtered_menu) -1)));
+					$str .= $this->_create_open_li($val, $level, $i, ($i == (count($menu) -1)));
 					$subitems = $this->_get_menu_items($val['id']);
 
 					if (!empty($subitems))
@@ -436,26 +419,11 @@ class Menu {
 	protected function _render_collabsible($menu, $level = 0)
 	{
 		// filter out hidden ones first. Need to do in seperate loop in case there is a hidden on e at the end
-		$filtered_menu = array();
-		
-		if (!$this->include_hidden)
-		{
-			foreach($menu as $key => $val)
-			{
-				if (!$val['hidden'] OR strtolower($val['hidden']) == 'no')
-				{
-					$filtered_menu[$key] = $val;
-				}
-			}
-		}
-		else
-		{
-			$filtered_menu = $menu;
-		}
+		$menu = $this->_filter_hidden($menu);
 		
 		$str = '';
 		
-		if (!empty($filtered_menu))
+		if (!empty($menu))
 		{
 			if (!empty($this->container_tag)) $str .= "\n".str_repeat("\t", $level)."<".$this->container_tag.$this->_get_attrs($this->container_tag_attrs);
 			if (!empty($this->container_tag_id) AND $level == 0) $str .= " id=\"".$this->container_tag_id."\"";
@@ -470,7 +438,7 @@ class Menu {
 			{
 				foreach($this->_active_items as $index => $item)
 				{
-					if (!empty($filtered_menu[$item]))
+					if (!empty($menu[$item]))
 					{
 						$active_index = $index;
 						break;
@@ -479,7 +447,7 @@ class Menu {
 			}
 			
 			// loop through base menu items and start drill down
-			foreach($filtered_menu as $key => $val)
+			foreach($menu as $key => $val)
 			{
 				$label = $this->_get_label($val['label']);
 
@@ -544,6 +512,9 @@ class Menu {
 	 */
 	protected function _render_breadcrumb($menu)
 	{
+		// filter out hidden ones first. Need to do in seperate loop in case there is a hidden on e at the end
+		$menu = $this->_filter_hidden($menu);
+		
 		if (empty($this->delimiter))
 		{
 			$this->delimiter = ' &gt; ';
@@ -623,6 +594,9 @@ class Menu {
 	 */
 	protected function _render_page_title($menu)
 	{
+		// filter out hidden ones first. Need to do in seperate loop in case there is a hidden on e at the end
+		$menu = $this->_filter_hidden($menu);
+		
 		if (empty($this->delimiter))
 		{
 			$this->delimiter = ' &gt; ';
@@ -647,7 +621,7 @@ class Menu {
 			for ($i = 0; $i <= $num; $i++)
 			{
 				$val = $this->_active_items[$i];
-				$label = $this->_get_label($this->_items[$val]['label']);
+				$label = $this->_get_label(strip_tags($this->_items[$val]['label']));
 				if ($i != 0)
 				{
 					$str .= $this->delimiter;
@@ -655,7 +629,7 @@ class Menu {
 				$str .= $label;
 			}
 			if (($num >= 0 AND !empty($home_link)) OR (empty($home_link) AND $num > 0)) $str .= $this->delimiter;
-			$str .= $home_link;
+			$str .= strip_tags($home_link);
 		}
 		else
 		{
@@ -664,7 +638,7 @@ class Menu {
 			for ($i = $num; $i >= 0; $i--)
 			{
 				$val = $this->_active_items[$i];
-				$label = $this->_get_label($this->_items[$val]['label']);
+				$label = $this->_get_label(strip_tags($this->_items[$val]['label']));
 				$str .= $label;
 				if ($i != 0)
 				{
@@ -688,6 +662,9 @@ class Menu {
 	 */
 	protected function _render_delimited($menu)
 	{
+		// filter out hidden ones first. Need to do in seperate loop in case there is a hidden on e at the end
+		$menu = $this->_filter_hidden($menu);
+		
 		if ($this->container_tag !== FALSE)
 		{
 			$this->container_tag = 'div';
@@ -859,56 +836,30 @@ class Menu {
 		$str = '';
 		$label = $this->_get_label($val['label']);
 		
-		if (function_exists('get_instance'))
+		$attrs = '';
+		if (!empty($val['location']))
 		{
-			$CI =& get_instance();
-			$CI->load->helper('url');
-			if (isset($val['location']))
+			if (!empty($val['attributes']))
 			{
-				if ($this->use_titles)
+				if (is_array($val['attributes']))
 				{
-					if (is_array($val['attributes']))
+					foreach($val['attributes'] as $key2 => $val2) 
 					{
-						if (!in_array('title', $val['attributes'])) $val['attributes']['title'] = strip_tags($val['label']);
+						$attrs .= ' '.$key2.'="'.$val2.'"';
 					}
-					else if (strpos($val['attributes'], 'title=') === FALSE)
-					{
-						$val['attributes'] .= ' title="'.strip_tags($val['label']).'"';
-					}
+				} else {
+					$attrs .= $val['attributes'];
 				}
-				$str .= anchor($val['location'], $label, $val['attributes']);
-				
 			}
-			else
+			if ($this->use_titles AND (empty($attrs) OR strpos($attrs, 'title=') === FALSE))
 			{
-				$str .= $label;
+				$attrs .= ' title="'.strip_tags($val['label']).'"';
 			}
-			
-		} else {
-			$attrs = '';
-			if (!empty($val['location']))
-			{
-				if (!empty($val['attributes']))
-				{
-					if (is_array($val['attributes']))
-					{
-						foreach($val['attributes'] as $key2 => $val2) 
-						{
-							$attrs .= ' '.$key2.'="'.$val2.'"';
-						}
-					} else {
-						$attrs .= $val['attributes'];
-					}
-					if ($this->use_titles AND strpos($attrs, 'title=') === FALSE) $attrs .= ' title="'.$attrs['label'].'"';
-				}
-				$str .= '<a href="'.site_url($val['location']).'"'.$attrs.'>'.$label.'</a>';
-			}
-			else
-			{
-				$str .= $label;
-			}
-			
-			
+			$str .= '<a href="'.site_url($val['location']).'" '.$attrs.'>'.$label.'</a>';
+		}
+		else
+		{
+			$str .= $label;
 		}
 		return $str;
 	}
@@ -940,7 +891,18 @@ class Menu {
 					$css_classes[] = $this->active_class;
 				}
 
-		if (!empty($this->styles[$level][$i])) $css_classes[] = $this->styles[$level][$i];
+		if (!empty($this->styles[$level][$i]))
+		{
+			if (is_array($this->styles[$level]))
+			{
+				$css_classes[] = $this->styles[$level][$i];
+			}
+			else if (is_string($this->styles[$level]))
+			{
+				$css_classes[] = $this->styles[$level];
+			}
+			
+		}
 
 		if (!empty($css_classes))
 		{
@@ -1033,7 +995,7 @@ class Menu {
 	/**
 	 * Gets the menu items based on the parent
 	 *
-	 * @access	public
+	 * @access	protected
 	 * @param	mixed parent id
 	 * @param	array menu items
 	 * @return	array
@@ -1056,6 +1018,40 @@ class Menu {
 		}
 		return $subitems;
 	}
+	
+	// --------------------------------------------------------------------
+
+	/**
+	 * Filter out hidden menu items
+	 *
+	 * @access	protected
+	 * @param	array menu items
+	 * @return	array
+	 */
+	protected function _filter_hidden($menu)
+	{
+		$filtered_menu = array();
+		if (!$this->include_hidden)
+		{
+			foreach($menu as $key => $val)
+			{
+				if (!$val['hidden'] OR strtolower($val['hidden']) == 'no')
+				{
+					$filtered_menu[$key] = $val;
+				}
+			}
+		}
+		else
+		{
+			$filtered_menu = $menu;
+		}
+		
+		return $filtered_menu;
+		
+	}
 
 
 }
+
+/* End of file Menu.php */
+/* Location: ./application/libraries/Menu.php */
